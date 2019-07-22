@@ -40,11 +40,11 @@ class MqttClient private constructor(private val url: HttpUrl,
                                      private val username: String?,
                                      private val password: String?,
                                      private val willTopic: String?,
-                                     private val willMessage: String?,
+                                     private val willMessage: ByteArray?,
                                      private val willQoS: MqttQoS?,
                                      private val retainWill: Boolean,
                                      private val cleanSession: Boolean,
-                                     private val protocolVersion: MqttProtocolVersion,
+                                     val protocolVersion: MqttProtocolVersion,
                                      private val connection: MqttConnection,
                                      private val callbackExecutor: Executor) {
 
@@ -65,8 +65,8 @@ class MqttClient private constructor(private val url: HttpUrl,
                 when (val parsed = protocolHandler.onMessage(source)) {
                     is MqttConnackPacket -> {
                         when (val connectionStatus = parsed.connectionStatus) {
-                            MqttConnectionResult.ACCEPTED -> callbackExecutor.execute { listener.onConnected() }
-                            else -> callbackExecutor.execute { listener.onConnectionFailed(connectionStatus ?: MqttConnectionResult.UNKNOWN) }
+                            MqttConnectionResult.ACCEPTED -> callbackExecutor.execute { listener.onConnected(this@MqttClient) }
+                            else -> callbackExecutor.execute { listener.onConnectionFailed(this@MqttClient, connectionStatus ?: MqttConnectionResult.UNKNOWN) }
                         }
                     }
                     is MqttPublishInPacket -> {
@@ -166,6 +166,13 @@ class MqttClient private constructor(private val url: HttpUrl,
         connection.sendMqttMessage(protocolHandler.buildMessage(MqttPingPacket()))
     }
 
+    /**
+     * Creates a new builder initialized to the values of this client
+     */
+    fun buildUpon(): Builder {
+        return Builder(this)
+    }
+
     class Builder(val clientId: String) {
 
         var connectionType = ConnectionType.TCP
@@ -180,7 +187,7 @@ class MqttClient private constructor(private val url: HttpUrl,
             private set
         var willTopic: String? = null
             private set
-        var willMessage: String? = null
+        var willMessage: ByteArray? = null
             private set
         var willQoS: MqttQoS? = null
             private set
@@ -197,6 +204,25 @@ class MqttClient private constructor(private val url: HttpUrl,
         var callbackExecutor: Executor? = null
             private set
 
+        constructor(client: MqttClient) : this(client.clientId) {
+            connectionType = client.connection.connectionType
+            httpUrl = client.url
+            okHttpClient = (client.connection as? WebsocketMqttConnection)?.httpClient
+            username = client.username
+            password = client.password
+            willTopic = client.willTopic
+            willMessage = client.willMessage
+            willQoS = client.willQoS
+            retainWill = client.retainWill
+            protocolVersion = client.protocolVersion
+            cleanSession = client.cleanSession
+            (client.connection as? TCPMqttConnection)?.let {
+                socketFactory = it.normalSocketFactory
+                sslSocketFactory = it.sslSocketFactory
+            }
+            callbackExecutor = client.callbackExecutor
+        }
+
         fun url(httpUrl: HttpUrl): Builder {
             this.httpUrl = httpUrl
             return this
@@ -207,7 +233,7 @@ class MqttClient private constructor(private val url: HttpUrl,
             return this
         }
 
-        fun lastWill(topic: String, message: String, qos: MqttQoS, retain: Boolean): Builder {
+        fun lastWill(topic: String, message: ByteArray, qos: MqttQoS, retain: Boolean): Builder {
             willTopic = topic
             willMessage = message
             willQoS = qos
@@ -285,14 +311,14 @@ interface MqttClientListener {
     /**
      * Called when the connection has been established and the server acknowledged the connection request
      */
-    fun onConnected()
+    fun onConnected(client: MqttClient)
 
     /**
      * Called creating the connection has failed
      *
      * @param result    The reason for the connection failure
      */
-    fun onConnectionFailed(result: MqttConnectionResult)
+    fun onConnectionFailed(client: MqttClient, result: MqttConnectionResult)
 
     /**
      * Called when the client has disconnected, optionally with error

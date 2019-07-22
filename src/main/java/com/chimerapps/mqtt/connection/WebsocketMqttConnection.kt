@@ -1,5 +1,6 @@
 package com.chimerapps.mqtt.connection
 
+import com.chimerapps.mqtt.MqttClient
 import com.chimerapps.mqtt.wrap
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
@@ -10,7 +11,7 @@ import okhttp3.WebSocketListener
 import okio.BufferedSource
 import okio.ByteString
 
-internal class WebsocketMqttConnection(private val httpClient: OkHttpClient) : MqttConnection {
+internal class WebsocketMqttConnection(internal val httpClient: OkHttpClient) : MqttConnection {
 
     private companion object {
         private const val STATUS_IDLE = 0
@@ -22,6 +23,8 @@ internal class WebsocketMqttConnection(private val httpClient: OkHttpClient) : M
     private var socketListener: MqttWebSocketListener? = null
     private var messageListener: MqttMessageListener? = null
     private var status = STATUS_IDLE
+
+    override val connectionType: MqttClient.ConnectionType = MqttClient.ConnectionType.WEBSOCKET
 
     override fun connect(url: HttpUrl, messageListener: MqttMessageListener) {
         synchronized(lock) {

@@ -17,7 +17,7 @@ internal open class MqttConnectPacket(private val protocolVersion: MqttProtocolV
                                       private val username: String?,
                                       private val password: String?,
                                       private val willTopic: String?,
-                                      private val willMessage: String?,
+                                      private val willMessage: ByteArray?,
                                       private val willQoS: MqttQoS?,
                                       private val willRetain: Boolean,
                                       private val cleanSession: Boolean) : AbstractMqttOutPacket(MqttControlPacketType.CONNECT, FLAGS_CONNECT) {
@@ -70,7 +70,6 @@ internal open class MqttConnectPacket(private val protocolVersion: MqttProtocolV
         var connectFlags = 0
         val clientIdentifierBytes = clientIdentifier.toByteArray(Charsets.UTF_8)
         val willTopicBytes = willTopic?.toByteArray(Charsets.UTF_8)
-        val willMessageBytes = willMessage?.toByteArray(Charsets.UTF_8)
         val usernameBytes = username?.toByteArray(Charsets.UTF_8)
         val passwordBytes = password?.toByteArray(Charsets.UTF_8)
 
@@ -110,13 +109,13 @@ internal open class MqttConnectPacket(private val protocolVersion: MqttProtocolV
 
         val payloadSize = (2 + clientIdentifierBytes.size) +
                 (willTopicBytes?.let { 2 + it.size } ?: 0) +
-                (willMessageBytes?.let { 2 + it.size } ?: 0) +
+                (willMessage?.let { 2 + it.size } ?: 0) +
                 (usernameBytes?.let { 2 + it.size } ?: 0) +
                 (passwordBytes?.let { 2 + it.size } ?: 0)
 
         //TODO keepalive
         return MqttConnectHeader(protocolVersion.code, connectFlags, keepAlive = 0, payloadSize = payloadSize, clientIdentifierBytes = clientIdentifierBytes,
-                willTopicBytes = willTopicBytes, willMessageBytes = willMessageBytes, userNameBytes = usernameBytes, passwordBytes = passwordBytes)
+                willTopicBytes = willTopicBytes, willMessageBytes = willMessage, userNameBytes = usernameBytes, passwordBytes = passwordBytes)
     }
 
     private class MqttConnectHeader(val protocolLevelFlag: Int, val connectFlags: Int, val keepAlive: Int, val payloadSize: Int,

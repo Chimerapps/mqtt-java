@@ -1,5 +1,6 @@
 package com.chimerapps.mqtt.connection
 
+import com.chimerapps.mqtt.MqttClient
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okio.BufferedSource
@@ -13,7 +14,7 @@ import java.net.Socket
 import javax.net.SocketFactory
 import javax.net.ssl.SSLSocketFactory
 
-internal class TCPMqttConnection(private val normalSocketFactory: SocketFactory, private val sslSocketFactory: SSLSocketFactory) : MqttConnection {
+internal class TCPMqttConnection(internal val normalSocketFactory: SocketFactory, internal val sslSocketFactory: SSLSocketFactory) : MqttConnection {
 
     private companion object {
         private const val STATUS_IDLE = 0
@@ -26,6 +27,8 @@ internal class TCPMqttConnection(private val normalSocketFactory: SocketFactory,
     private var messageListener: MqttMessageListener? = null
 
     private var status = STATUS_IDLE
+
+    override val connectionType: MqttClient.ConnectionType = MqttClient.ConnectionType.TCP
 
     override fun connect(url: HttpUrl, messageListener: MqttMessageListener) {
         synchronized(lock) {
