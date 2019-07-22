@@ -7,7 +7,7 @@ open class BaseMqttClientTest {
 
     protected fun testClient(client: MqttClient) {
         client.connect(object : MqttClientListener {
-            override fun onConnected() {
+            override fun onConnected(client: MqttClient) {
                 println("Connected to mqtt, subscribing to topic")
                 val token = client.subscribe("/testTopic", MqttQoS.AT_MOST_ONCE).token
                 println("Subscribed with token: $token")
@@ -19,7 +19,7 @@ open class BaseMqttClientTest {
                 println("Got pub token: $pubToken")
             }
 
-            override fun onConnectionFailed(result: MqttConnectionResult) {
+            override fun onConnectionFailed(client: MqttClient, result: MqttConnectionResult) {
                 println("Connection failed: $result")
             }
 
@@ -28,8 +28,8 @@ open class BaseMqttClientTest {
                 error?.printStackTrace()
             }
 
-            override fun onMessage(topic: String, message: MqttMessage) {
-                println("Got message from topic: $topic -> ${message.payload.toString(Charsets.UTF_8)}")
+            override fun onMessage(message: MqttMessage) {
+                println("Got message from topic: ${message.topic} -> ${message.payload.toString(Charsets.UTF_8)}")
             }
 
             override fun onActionSuccess(token: MqttToken) {
