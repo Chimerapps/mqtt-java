@@ -135,10 +135,14 @@ internal class MqttWebSocketListener(private val connection: WebsocketMqttConnec
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        synchronized(this) {
+        val closed = synchronized(this) {
             this.socket = null
+            closed
         }
-        connection.onConnectionClosed(this, t)
+        if (closed)
+            connection.onConnectionClosed(this, 1000, "")
+        else
+            connection.onConnectionClosed(this, t)
     }
 
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
