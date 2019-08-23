@@ -54,19 +54,30 @@ class MqttClient private constructor(private val url: HttpUrl,
 
     private val protocolHandler = Mqtt3_1Protocol() //No special handling required for 3.1.1
 
+    var connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED
+        get() = synchronized(this) { field }
+        private set(value) = synchronized(this) { field = value }
+
     /**
      * Connect to the server and use the given listener to report messages on
      *
      * @param listener  The listener to use for callbacks
      */
     fun connect(listener: MqttClientListener) {
+        connectionStatus = ConnectionStatus.CONNECTING
         connection.connect(url, object : MqttMessageListener {
             override fun onMessage(source: BufferedSource) {
                 when (val parsed = protocolHandler.onMessage(source)) {
                     is MqttConnackPacket -> {
                         when (val connectionStatus = parsed.connectionStatus) {
-                            MqttConnectionResult.ACCEPTED -> callbackExecutor.execute { listener.onConnected(this@MqttClient) }
-                            else -> callbackExecutor.execute { listener.onConnectionFailed(this@MqttClient, connectionStatus ?: MqttConnectionResult.UNKNOWN) }
+                            MqttConnectionResult.ACCEPTED -> {
+                                this@MqttClient.connectionStatus = ConnectionStatus.CONNTECTED
+                                callbackExecutor.execute { listener.onConnected(this@MqttClient) }
+                            }
+                            else -> callbackExecutor.execute {
+                                this@MqttClient.connectionStatus = ConnectionStatus.DISCONNECTED
+                                listener.onConnectionFailed(this@MqttClient, connectionStatus ?: MqttConnectionResult.UNKNOWN)
+                            }
                         }
                     }
                     is MqttPublishInPacket -> {
@@ -93,11 +104,13 @@ class MqttClient private constructor(private val url: HttpUrl,
             }
 
             override fun onClosed(code: Int, reason: String) {
+                connectionStatus = ConnectionStatus.DISCONNECTED
                 callbackExecutor.execute { listener.onDisconnected(null) }
                 protocolHandler.clear()
             }
 
             override fun onClosedWithError(error: Throwable) {
+                connectionStatus = ConnectionStatus.DISCONNECTED
                 callbackExecutor.execute { listener.onDisconnected(error) }
                 protocolHandler.clear()
             }
@@ -301,6 +314,12 @@ class MqttClient private constructor(private val url: HttpUrl,
         }
     }
 
+    enum class ConnectionStatus {
+        DISCONNECTED,
+        CONNECTING,
+        CONNTECTED
+    }
+
 }
 
 /**
@@ -405,3 +424,26 @@ class MqttTopicSubscription(private val topic: String, private val client: MqttC
  * NOTE: Use {Object#equals} and not pointer equality
  */
 data class MqttToken(private val code: Int)
+
+/**
+ * Adapter for the {@link MqttClientListener} which provides a default (empty) implementation for all methods
+ */
+abstract class MqttClientListenerAdapter : MqttClientListener {
+    override fun onConnected(client: MqttClient) {
+    }
+
+    override fun onConnectionFailed(client: MqttClient, result: MqttConnectionResult) {
+    }
+
+    override fun onDisconnected(error: Throwable?) {
+    }
+
+    override fun onMessage(message: MqttMessage) {
+    }
+
+    override fun onActionSuccess(token: MqttToken) {
+    }
+
+    override fun onPong() {
+    }
+}
