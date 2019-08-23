@@ -71,7 +71,7 @@ class MqttClient private constructor(private val url: HttpUrl,
                     is MqttConnackPacket -> {
                         when (val connectionStatus = parsed.connectionStatus) {
                             MqttConnectionResult.ACCEPTED -> {
-                                this@MqttClient.connectionStatus = ConnectionStatus.CONNTECTED
+                                this@MqttClient.connectionStatus = ConnectionStatus.CONNECTED
                                 callbackExecutor.execute { listener.onConnected(this@MqttClient) }
                             }
                             else -> callbackExecutor.execute {
@@ -317,7 +317,7 @@ class MqttClient private constructor(private val url: HttpUrl,
     enum class ConnectionStatus {
         DISCONNECTED,
         CONNECTING,
-        CONNTECTED
+        CONNECTED
     }
 
 }
