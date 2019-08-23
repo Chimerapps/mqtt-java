@@ -1,4 +1,9 @@
 # mqtt-java
+[![Download](https://api.bintray.com/packages/nicolaverbeeck/maven/mqtt-java/images/download.svg)](https://bintray.com/nicolaverbeeck/maven/mqtt-java/_latestVersion)
+```
+implementation 'com.chimerapps:mqtt-java:<latest version>
+```
+
 Small MQTT library for java
 
 Most of the MQTT 3.1.1 spec has been implemented, with exception of keepalives (which are set to disabled now)
