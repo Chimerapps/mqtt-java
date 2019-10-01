@@ -8,7 +8,7 @@ plugins {
 
 apply plugin: 'maven-publish'
 
-def artifactVersion = '0.0.4'
+def artifactVersion = '0.1.0'
 def artifactGroup = 'com.chimerapps'
 def artifactName = 'mqtt-java'
 

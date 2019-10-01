@@ -11,6 +11,7 @@ import okio.source
 import java.io.IOException
 import java.net.InetAddress
 import java.net.Socket
+import java.util.concurrent.Executors
 import javax.net.SocketFactory
 import javax.net.ssl.SSLSocketFactory
 
@@ -101,6 +102,7 @@ internal class TCPHandler(private val url: HttpUrl, private val normalSocketFact
     private var socketSource: BufferedSource? = null
     private var closed = false
     private var thread: Thread? = null
+    private val writeExecutor = Executors.newSingleThreadExecutor()
 
     override fun run() {
         synchronized(this) {
@@ -115,30 +117,36 @@ internal class TCPHandler(private val url: HttpUrl, private val normalSocketFact
         } catch (e: Throwable) {
             synchronized(this) { if (closed) return }
             parent.onError(this, e)
+        } finally {
+            writeExecutor.shutdown()
         }
     }
 
     fun close() {
-        synchronized(this) {
-            synchronized(concurrentWriteLock) {
-                closed = true
-                socket?.close()
-                socketSink = null
-                socketSource = null
-                socket = null
-            }
-            val temp = thread
-            thread = null
-            temp
-        }?.interrupt()
+        safeExecute {
+            synchronized(this) {
+                synchronized(concurrentWriteLock) {
+                    closed = true
+                    socket?.close()
+                    socketSink = null
+                    socketSource = null
+                    socket = null
+                }
+                val temp = thread
+                thread = null
+                temp
+            }?.interrupt()
+        }
     }
 
     fun write(data: BufferedSource) {
-        synchronized(this) {
-            synchronized(concurrentWriteLock) {
-                socketSink?.let { sink ->
-                    data.readAll(sink)
-                    sink.flush()
+        safeExecute {
+            synchronized(this) {
+                synchronized(concurrentWriteLock) {
+                    socketSink?.let { sink ->
+                        data.readAll(sink)
+                        sink.flush()
+                    }
                 }
             }
         }
@@ -183,6 +191,13 @@ internal class TCPHandler(private val url: HttpUrl, private val normalSocketFact
         lastError?.let { throw it }
 
         throw IOException("No addresses found to connect on")
+    }
+
+    private fun safeExecute(block: () -> Unit) {
+        try {
+            writeExecutor.execute(block)
+        } catch (e: Throwable) {
+        }
     }
 
 }

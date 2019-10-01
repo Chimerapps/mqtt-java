@@ -16,8 +16,7 @@ internal enum class MqttControlPacketType(val code: Int) {
     UNSUBACK(11),
     PINGREQ(12),
     PINGRESP(13),
-    DISCONNECT(14)
-
+    DISCONNECT(14),
 }
 
 //SPEC 2.2.2
