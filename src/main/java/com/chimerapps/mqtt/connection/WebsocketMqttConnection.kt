@@ -31,7 +31,10 @@ internal class WebsocketMqttConnection(internal val httpClient: OkHttpClient) : 
             if (status != STATUS_IDLE)
                 throw IllegalStateException("Connection is not idle")
 
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                    .url(url)
+                    .header("Sec-WebSocket-Protocol","mqtt")
+                    .build()
             val socketListener = MqttWebSocketListener(this)
             this.socketListener = socketListener
             this.messageListener = messageListener
