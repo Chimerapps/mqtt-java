@@ -1,15 +1,21 @@
 package com.chimerapps.mqtt.connection
 
 import com.chimerapps.mqtt.MqttClient
-import com.chimerapps.mqtt.wrap
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.Buffer
 import okio.BufferedSource
 import okio.ByteString
+import okio.Source
+import okio.Timeout
+import okio.buffer
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.thread
+import kotlin.concurrent.withLock
 
 internal class WebsocketMqttConnection(internal val httpClient: OkHttpClient) : MqttConnection {
 
@@ -33,7 +39,7 @@ internal class WebsocketMqttConnection(internal val httpClient: OkHttpClient) : 
 
             val request = Request.Builder()
                     .url(url)
-                    .header("Sec-WebSocket-Protocol","mqtt")
+                    .header("Sec-WebSocket-Protocol", "mqtt")
                     .build()
             val socketListener = MqttWebSocketListener(this)
             this.socketListener = socketListener
@@ -62,12 +68,13 @@ internal class WebsocketMqttConnection(internal val httpClient: OkHttpClient) : 
         }
     }
 
-    internal fun onMessage(listener: MqttWebSocketListener, data: BufferedSource) {
+    internal fun onMessage(listener: MqttWebSocketListener, data: BufferedSource): Boolean {
         synchronized(lock) {
             if (socketListener != listener)
-                return
-            messageListener?.onMessage(data)
-        }
+                return false
+            messageListener
+        }?.onMessage(data)
+        return true
     }
 
     internal fun onConnected(listener: MqttWebSocketListener) {
@@ -109,10 +116,26 @@ internal class MqttWebSocketListener(private val connection: WebsocketMqttConnec
 
     private var socket: WebSocket? = null
     private var closed = false
+    private val rollingSource = RollingSource()
+    private val rollingBuffer = rollingSource.buffer()
+    private val thread: Thread
+
+    init {
+        thread = thread(start = false, name = "Mqtt Websocket Listener") {
+            try {
+                while (synchronized(this) { !closed }) {
+                    if (!connection.onMessage(this, rollingBuffer)) return@thread
+                }
+            } catch (e: Throwable) {
+            }
+        }
+    }
 
     internal fun close() {
         synchronized(this) {
             closed = true
+            rollingSource.close()
+            thread.interrupt()
             socket?.close(1000, "")
             socket = null
         }
@@ -135,6 +158,7 @@ internal class MqttWebSocketListener(private val connection: WebsocketMqttConnec
             this.socket = webSocket
         }
         connection.onConnected(this)
+        thread.start()
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -151,8 +175,8 @@ internal class MqttWebSocketListener(private val connection: WebsocketMqttConnec
     override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
         super.onMessage(webSocket, bytes)
 
-        val buffer = bytes.toByteArray().wrap()
-        connection.onMessage(this, buffer)
+        val buffer = bytes.toByteArray()
+        rollingSource.offer(buffer)
     }
 
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -161,4 +185,45 @@ internal class MqttWebSocketListener(private val connection: WebsocketMqttConnec
         }
         connection.onConnectionClosed(this, code, reason)
     }
+}
+
+internal class RollingSource : Source {
+
+    private var closed = false
+    private val internalBuffer = Buffer()
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
+
+    override fun close() {
+        synchronized(this) {
+            closed = true
+        }
+        lock.withLock {
+            condition.signalAll()
+        }
+    }
+
+    override fun read(sink: Buffer, byteCount: Long): Long {
+        synchronized(this) {
+            if (closed) return -1L
+        }
+        while (true) {
+            lock.withLock {
+                if (internalBuffer.size > 0) {
+                    return internalBuffer.read(sink, byteCount)
+                }
+                condition.await()
+            }
+        }
+    }
+
+    override fun timeout(): Timeout = Timeout.NONE
+
+    fun offer(byteArray: ByteArray) {
+        lock.withLock {
+            internalBuffer.write(byteArray)
+            condition.signalAll()
+        }
+    }
+
 }
