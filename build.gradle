@@ -1,19 +1,12 @@
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.3.70'
-    id 'com.jfrog.bintray' version '1.8.4'
     id 'org.jetbrains.dokka' version '0.9.17'
     id 'com.github.ben-manes.versions' version "0.21.0"
 }
 
 apply plugin: 'maven-publish'
-
-def artifactVersion = '0.2.0'
-def artifactGroup = 'com.chimerapps'
-def artifactName = 'mqtt-java'
-
-group artifactGroup
-version artifactVersion
+apply plugin: 'signing'
 
 sourceCompatibility = JavaVersion.VERSION_1_7
 targetCompatibility = JavaVersion.VERSION_1_7
@@ -51,71 +44,4 @@ afterEvaluate {
     sourceJar.dependsOn assemble
 }
 
-bintray {
-    user = System.getenv('BINTRAY_USER')
-    key = System.getenv('BINTRAY_KEY')
-    pkg {
-        repo = 'maven'
-        name = 'mqtt-java'
-        licenses = ['Apache-2.0']
-        vcsUrl = 'https://github.com/Chimerapps/mqtt-java'
-
-        version {
-            name = "$artifactVersion"
-            desc = "Simple MQTT library for java/kotlin"
-            released = new Date()
-        }
-    }
-    publications = ['maven']
-}
-
-def pomConfig = {
-    licenses {
-        license {
-            name "The Apache Software License, Version 2.0"
-            url "http://www.apache.org/licenses/LICENSE-2.0.txt"
-            distribution "repo"
-        }
-    }
-    developers {
-        developer {
-            name "Nicola Verbeeck"
-            email "nicola@chimerapps.com"
-            organization "Chimerapps"
-        }
-    }
-}
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            groupId "$artifactGroup"
-            artifactId "$artifactName"
-            version "$artifactVersion"
-
-            artifact("$buildDir/libs/mqtt-${artifactVersion}.jar")
-            artifact sourceJar
-            artifact javadocJar
-
-            pom.withXml {
-                def root = asNode()
-                root.appendNode('description', 'Simple MQTT library for java/kotlin')
-                root.appendNode('name', 'mqtt-java')
-                root.appendNode('url', 'https://github.com/Chimerapps/mqtt-java')
-                root.children().last() + pomConfig
-
-                def dependenciesNode = root.appendNode('dependencies')
-
-                //Iterate over the compile dependencies (we don't want the test ones), adding a <dependency> node for each
-                configurations.implementation.allDependencies.each {
-                    if (it instanceof ExternalModuleDependency) {
-                        def dependencyNode = dependenciesNode.appendNode('dependency')
-                        dependencyNode.appendNode('groupId', it.group)
-                        dependencyNode.appendNode('artifactId', it.name)
-                        dependencyNode.appendNode('version', it.version)
-                    }
-                }
-            }
-        }
-    }
-}
+apply from: "${rootProject.projectDir}/scripts/publish-mavencentral.gradle"
